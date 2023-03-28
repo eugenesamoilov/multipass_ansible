@@ -1,0 +1,60 @@
+#cloud-config
+preserve_hostname: true
+hostname: {{ item }}
+fqdn: {{ item }}.{{ domain }}
+prefer_fqdn_over_hostname: true
+disable_root: true
+timezone: Asia/Yakutsk
+users:
+  - default
+  -  name: eugene
+     lock_passwd: true
+     gecos: Eugene
+     groups: [adm, audio, cdrom, dialout, dip, floppy, lxd, netdev, plugdev, sudo, video]
+     home: /home/eugene
+     sudo: ALL=(ALL) NOPASSWD:ALL
+     shell: /bin/bash
+     ssh_authorized_keys:
+      - ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQDJfnHumH9uPDHTioTDF6NccJmejjiHUq/bvHhqYE8LBCkC2MHNBefennjD96AWFciMWIKKSX3SQZ2ipriIuxIHFgzCEL5NHxZlsklq9H7H1bJcpEd/3viReT8Au+sNc/CSD5rATNZdNqN+KhxoNAwyyjaucPAQ4fO5xR2i3XxbP35dlLVooX0U8pzLQa+d8R8nRsqT07PMesNCBBwqeedQ2uuUizLrgiTr6d27F9OWyoKjHGXQbpbCPSuuGEJGv49vsbgB11qn08hs/vlGOQ+97M61xmkY5ga2lfj3X6Esk1YMXeH87fxRCctbS3hAPEE6gXddhnB5LmxdnoFShgqq/sYE4wYkh0WrdGudl04flrfT3rMcs03MT8+yF51pbN6We+ZBcWAuKAk7pEOy7uDxq7fML4vW306boZFRqK1/NP6EOvdjCEKWYz2Kk0jAeJNZTfFb1DTHuOEly7pBSdA/1UkwiBkfRuftbuEOkzZN6Y0tuZn35NIuRE7w82Q6Fek= eugene@imac.lan
+ssh_pwauth: no
+
+package_update: true
+package_upgrade: true
+package_reboot_if_required: true
+
+write_files:
+- path: /etc/netplan/my-new-config.yaml
+  permissions: '0644'
+  content: |
+    network:
+        ethernets:
+            enp0s3:
+                dhcp4: true
+                match:
+                    name: enp0s3
+                set-name: enp0s3
+            enp0s8:
+                dhcp4: no
+                addresses: [{{ hostvars[item]['ansible_host'] }}/24]
+                routes:
+                  - to: default
+                    via: {{gw_ip}}
+                    metric: 200
+                nameservers:
+                    addresses: [8.8.8.8]
+                    #search: [{{domain}}]
+                match:
+                    name: enp0s8
+                optional: true
+        version: 2
+runcmd:
+ - rm /etc/netplan/50-cloud-init.yaml
+ - netplan generate
+ - netplan apply
+
+final_message: |
+  cloud-init has finished
+  version: $version
+  timestamp: $timestamp
+  datasource: $datasource
+  uptime: $uptime

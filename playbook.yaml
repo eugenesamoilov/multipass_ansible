@@ -1,0 +1,79 @@
+---
+- name: multipass launch
+  hosts: localhost
+  tags: create_vm
+  gather_facts: false
+  tasks:
+  - name: debug create instance
+    debug:
+      msg: "name: {{item}} cpu: {{ hostvars[item]['cpu'] }} ram: {{ hostvars[item]['ram'] }} disk: {{ hostvars[item]['disksize'] }}"
+    loop: "{{ groups['all'] }}"
+    when: item!="localhost"
+    tags:
+    - debug_instance
+  - name: render template --cloud-init files 
+    become: false
+    ansible.builtin.template:
+      src: "templates/cloud-init.j2"
+      dest: "files/cloud-init-{{item}}.yaml"
+    loop: "{{ groups['all'] }}"
+    when: item!="localhost"
+    tags:
+    - render_cloud
+  - name: Create multipass instance
+    become: false
+    command: "multipass launch -n {{ item }} -c {{ hostvars[item]['cpu'] }} -m {{ hostvars[item]['ram'] }} -d {{ hostvars[item]['disksize'] }} --network en1 --cloud-init files/cloud-init-{{item}}.yaml"
+    loop: "{{ groups['all'] }}"
+    async: 60 # Maximum allowed time in Seconds
+    poll: 0 # Polling Interval in Seconds
+    when: item!="localhost"
+    tags:
+    - deploy_instance
+  - name: Wait 300 seconds for port 22 to become open and contain "OpenSSH"
+    ansible.builtin.wait_for:
+      port: 22
+      host: "{{ hostvars[item]['ansible_host'] }}"
+      search_regex: OpenSSH
+      delay: 10
+    loop: "{{ groups['all'] }}"
+    when: item!="localhost"
+    connection: local    
+    tags:
+    - wait_ssh 
+  - name: remove rendered files
+    become: false
+    ansible.builtin.file:
+      path: "files/cloud-init-{{item}}.yaml"
+      state: absent 
+    loop: "{{ groups['all'] }}"
+    when: item!="localhost"
+    tags:
+    - remove_render_cloud
+  - name: remove ssh known_hosts
+    become: false
+    ansible.builtin.file:
+      path: "~/.ssh/known_hosts"
+      state: absent 
+    tags:
+    - remove_known_hosts    
+
+- name: multipass delete all nodes
+  hosts: localhost
+  tags:
+   - delete_instances
+  gather_facts: false
+  tasks:
+    - name: delete multipass all instances
+      block:
+      - name: delete multipass all instances
+        command: "multipass delete --all"
+        async: 60 # Maximum allowed time in Seconds
+        poll: 0 # Polling Interval in Seconds
+      - name: sleep {{sleep_time | default(' 5 ')}} sec
+        command: "sleep {{sleep_time | default(' 5 ')}}"
+      - name: purge multipass all instances
+        command: "multipass purge"
+        async: 60 # Maximum allowed time in Seconds
+        poll: 0 # Polling Interval in Seconds
+
+
